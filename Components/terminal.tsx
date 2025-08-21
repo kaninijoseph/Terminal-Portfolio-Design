@@ -5,7 +5,6 @@ import { JetBrains_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 
 type CommandOutput = ReactNode[];
-
 type CommandFunction = () => CommandOutput;
 
 const jetbrainsMono = JetBrains_Mono({
@@ -23,75 +22,21 @@ interface TerminalLine {
   isCommand: boolean;
 }
 
-// Typing effect hook
-const useTypingEffect = (text: string, speed: number = 30) => {
-  const [displayedText, setDisplayedText] = useState("");
-
-  useEffect(() => {
-    setDisplayedText(""); // Reset when text changes
-    let index = 0;
-    const interval = setInterval(() => {
-      if (index < text.length) {
-        setDisplayedText((prev) => prev + text.charAt(index));
-        index++;
-      } else {
-        clearInterval(interval);
-      }
-    }, speed);
-
-    return () => clearInterval(interval);
-  }, [text, speed]);
-
-  return displayedText;
-};
-// Component to display typed line
-const TerminalLineDisplay = ({
-  text,
-  isCommand,
-  speed = 10,
-}: {
-  text: ReactNode;
-  isCommand: boolean;
-  speed?: number;
-}) => {
-  if (typeof text === "string") {
-    const typedText = useTypingEffect(text, speed);
-    return (
-      <div
-        key={`display-${Date.now()}`}
-        className={`${
-          isCommand ? "text-green-400" : "text-gray-300"
-        } mb-2 pl-3 sm:pl-4 md:pl-6`}
-      >
-        {typedText}
-      </div>
-    );
-  }
-  return (
-    <div
-      key={`display-${Date.now()}`}
-      className={`${
-        isCommand ? "text-green-400" : "text-gray-300"
-      } mb-2 pl-3 sm:pl-4 md:pl-6`}
-    >
-      {text}
-    </div>
-  );
-};
-
 const Terminal = () => {
   const [input, setInput] = useState<string>("");
   const [output, setOutput] = useState<TerminalLine[]>([
     { text: "Welcome!", isCommand: false },
     { text: 'Type "help" to see available commands', isCommand: false },
   ]);
+  const [typing, setTyping] = useState<boolean>(false);
+  const [typedText, setTypedText] = useState<string>("");
 
   const endOfTerminalRef = useRef<HTMLDivElement | null>(null);
 
   // Auto-scroll
   useEffect(() => {
     endOfTerminalRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [output]);
+  }, [output, typedText]);
 
   const commands: CommandSet = {
     help: () => [
@@ -151,11 +96,67 @@ const Terminal = () => {
     clear: () => [],
   };
 
+  const projectDetails: { [key: string]: CommandOutput } = {
+    "1": [
+      "AI-powered Recommendation System:",
+      "• Built with Python, TensorFlow, and React.",
+      "• Delivers personalized content suggestions using collaborative filtering.",
+      "• Deployed on AWS with scalable microservices.",
+    ],
+    "2": [
+      "Computer Vision Application:",
+      "• Uses PyTorch for image classification and object detection.",
+      "• Real-time processing with optimized inference pipeline.",
+      "• Integrated with web dashboard for visualization.",
+    ],
+    "3": [
+      "Full-stack Web Application:",
+      "• Next.js frontend, Node.js backend, MongoDB database.",
+      "• Features authentication, RESTful APIs, and responsive UI.",
+      "• Deployed on GCP with CI/CD automation.",
+    ],
+  };
+
+  // Typing effect for last output line
+  useEffect(() => {
+    // Only type the last line if it's not a command and is a string
+    const last = output[output.length - 1];
+    if (last && !last.isCommand && typeof last.text === "string") {
+      setTyping(true);
+      setTypedText("");
+      let index = 0;
+      const text = last.text as string;
+      const speed = 30;
+      let cancelled = false;
+
+      const typeNext = () => {
+        if (cancelled) return;
+        if (index <= text.length) {
+          setTypedText(text.slice(0, index));
+          index++;
+          if (index <= text.length) {
+            setTimeout(typeNext, speed);
+          } else {
+            setTyping(false);
+          }
+        }
+      };
+      typeNext();
+
+      return () => {
+        cancelled = true;
+      };
+    } else {
+      setTyping(false);
+      setTypedText("");
+    }
+  }, [output]);
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
 
     if (input === "clear") {
-      setOutput([]); // CHANGED: Clear all output completely
+      setOutput([]);
       setInput("");
       return;
     }
@@ -175,10 +176,20 @@ const Terminal = () => {
       ];
     } else if (input.startsWith("project ")) {
       const projectNum = input.split(" ")[1];
-      newOutput.push({
-        text: `Details for project ${projectNum} coming soon!`,
-        isCommand: false,
-      });
+      if (projectDetails[projectNum]) {
+        newOutput = [
+          ...newOutput,
+          ...projectDetails[projectNum].map((line) => ({
+            text: line,
+            isCommand: false,
+          })),
+        ];
+      } else {
+        newOutput.push({
+          text: `Project ${projectNum} doesn't exist.`,
+          isCommand: false,
+        });
+      }
     } else if (input) {
       newOutput.push({ text: `Command not found: ${input}`, isCommand: false });
     }
@@ -211,17 +222,23 @@ const Terminal = () => {
           }}
         >
           {output.map((item, index) => {
-            const isLastLine = index === output.length - 1 && !item.isCommand;
-            return isLastLine ? (
-              <TerminalLineDisplay
-                key={`output-${index}-${item.isCommand ? "cmd" : "out"}`}
-                text={
-                  item.isCommand ? `@ng'ashjoseph/${item.text} ~$` : item.text
-                }
-                isCommand={item.isCommand}
-              />
-            ) : (
+            const isLastLine =
+              index === output.length - 1 &&
+              !item.isCommand &&
+              typeof item.text === "string";
+            if (isLastLine && typing) {
+              return (
+                <div
+                  key={`output-${index}-typing`}
+                  className="text-gray-300 mb-2 pl-3 sm:pl-4 md:pl-6"
+                >
+                  {typedText}
+                </div>
+              );
+            }
+            return (
               <div
+                key={`output-${index}-${item.isCommand ? "cmd" : "out"}`}
                 className={
                   item.isCommand
                     ? "text-green-400 mb-2 "
