@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, FormEvent } from "react";
 import terminalBg from "@/public/final_bg.jpg";
 import { JetBrains_Mono } from "next/font/google";
 import type { ReactNode } from "react";
+import { PROJECTS } from "../constants/constants";
 
 type CommandOutput = ReactNode[];
 type CommandFunction = () => CommandOutput;
@@ -18,11 +19,15 @@ interface CommandSet {
 }
 
 interface TerminalLine {
-  text: ReactNode; // string | JSX allowed
+  text: ReactNode;
   isCommand: boolean;
 }
 
-const Terminal = () => {
+interface TerminalProps {
+  onProjectSelect?: (img: string | null) => void;
+}
+
+const Terminal = ({ onProjectSelect }: TerminalProps) => {
   const [input, setInput] = useState<string>("");
   const [output, setOutput] = useState<TerminalLine[]>([
     { text: "Welcome!", isCommand: false },
@@ -30,52 +35,149 @@ const Terminal = () => {
   ]);
   const [typing, setTyping] = useState<boolean>(false);
   const [typedText, setTypedText] = useState<string>("");
+  const [selectedIndex, setSelectedIndex] = useState<number>(0);
 
   const endOfTerminalRef = useRef<HTMLDivElement | null>(null);
 
-  // Auto-scroll
+  // Auto-scroll logic
   useEffect(() => {
     endOfTerminalRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [output, typedText]);
 
+  // Unified Command Processor
+  const executeCommand = (cmd: string) => {
+    const rawInput = cmd.toLowerCase().trim();
+
+    if (rawInput === "clear") {
+      setOutput([]);
+      if (onProjectSelect) onProjectSelect(null);
+      return;
+    }
+
+    let newOutput: TerminalLine[] = [...output, { text: cmd, isCommand: true }];
+
+    if (rawInput.startsWith("project ")) {
+      const id = rawInput.split(" ")[1];
+      const project = PROJECTS.find((p) => p.id === id);
+
+      if (project) {
+        // Trigger image in Header
+        if (onProjectSelect) onProjectSelect(project.image);
+
+        newOutput.push({
+          text: `> Opening ${project.name} Visuals...`,
+          isCommand: false,
+        });
+        project.details.forEach((line) =>
+          newOutput.push({ text: line, isCommand: false }),
+        );
+      } else {
+        newOutput.push({ text: `Project ${id} not found.`, isCommand: false });
+      }
+    } else {
+      // Hide image for non-project commands
+      if (onProjectSelect) onProjectSelect(null);
+
+      if (commands[rawInput]) {
+        const result = commands[rawInput]();
+        result.forEach((line) =>
+          newOutput.push({ text: line, isCommand: false }),
+        );
+      } else if (rawInput !== "") {
+        newOutput.push({
+          text: `Command not found: ${rawInput}`,
+          isCommand: false,
+        });
+      }
+    }
+
+    setOutput(newOutput);
+  };
+
+  // Keyboard Traversal and Selection
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // If typing in input, let form handle Enter
+      if (document.activeElement?.tagName === "INPUT" && e.key === "Enter")
+        return;
+      if (document.activeElement?.tagName === "INPUT" && input !== "") return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedIndex((prev) => {
+          const next = (prev + 1) % PROJECTS.length;
+          if (onProjectSelect) onProjectSelect(PROJECTS[next].image);
+          return next;
+        });
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedIndex((prev) => {
+          const next = (prev - 1 + PROJECTS.length) % PROJECTS.length;
+          if (onProjectSelect) onProjectSelect(PROJECTS[next].image);
+          return next;
+        });
+      } else if (
+        e.key === "Enter" &&
+        document.activeElement?.tagName !== "INPUT"
+      ) {
+        executeCommand(`project ${PROJECTS[selectedIndex].id}`);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedIndex, onProjectSelect, output]);
+
   const commands: CommandSet = {
     help: () => [
       "Available commands:",
-      '"about" - Show about information',
-      '"skills" - List my technical skills',
+      '"about"    - Show about information',
+      '"skills"   - List my technical skills',
       '"projects" - View my projects',
-      '"contact" - Get contact information',
-      '"clear" - Clear the terminal',
+      '"contact"  - Get contact information',
+      '"clear"    - Clear the terminal',
     ],
     about: () => [
-      "I'm Kanini Joseph, an AI Developer and Software Engineer",
-      "Passionate about building intelligent solutions with code",
-      "Specialized in machine learning, deep learning, and full-stack development",
+      "Specialized in architecting autonomous systems that close the gap between raw data and local action.",
+      "I don't just build interfaces; I design agentic workflows that solve complex business logic.",
+      "My edge: Combining deep-stack engineering with LLM orchestration to build self-correcting software.",
     ],
     skills: () => [
-      "Technical Skills:",
-      "• Machine Learning (TensorFlow, PyTorch)",
-      "• Python, JavaScript/TypeScript",
-      "• React, Next.js, Node.js",
-      "• SQL & NoSQL databases",
-      "• Cloud platforms (AWS, GCP)",
+      <div key="1">
+        <span className="font-bold text-blue-400">[01] Full-Stack:</span>{" "}
+        Next.js • TypeScript • Node.js • PostgreSQL
+      </div>,
+      <div key="2">
+        <span className="font-bold text-purple-400">[02] AI/Agents:</span> n8n •
+        LangChain • RAG • VectorDBs
+      </div>,
+      <div key="3">
+        <span className="font-bold text-green-400">[03] ML/Data:</span> Python •
+        TensorFlow • XGBoost
+      </div>,
+      <div key="4">
+        <span className="font-bold text-red-400">[04] DevOps:</span> Docker •
+        Linux • CI/CD • AWS
+      </div>,
+      <div key="5">
+        <span className="font-bold text-yellow-400">[05] Hardware:</span>{" "}
+        Circuitry • Lighting Design
+      </div>,
     ],
     projects: () => [
       "Featured Projects:",
-      "1. AI-powered recommendation system",
-      "2. Computer vision application",
-      "3. Full-stack web application",
-      'Type "project [number]" for details',
+      ...PROJECTS.map((p) => `${p.id}. ${p.name} - ${p.description}`),
+      'Type "project [number]" or use Arrows + Enter',
     ],
     contact: (): CommandOutput => [
       "Contact Information:",
-      "Email: kanini@example.com",
+      "Email:ngashjoseph552@example.com",
+      "phone number: 0742059454",
       <span key="github">
         GitHub:{" "}
         <a
           href="https://github.com/kaninijoseph"
           target="_blank"
-          rel="noopener noreferrer"
           className="text-blue-400 hover:underline"
         >
           github.com/kaninijoseph
@@ -86,7 +188,6 @@ const Terminal = () => {
         <a
           href="https://linkedin.com/in/kanini"
           target="_blank"
-          rel="noopener noreferrer"
           className="text-blue-400 hover:underline"
         >
           linkedin.com/in/kanini
@@ -96,129 +197,57 @@ const Terminal = () => {
     clear: () => [],
   };
 
-  const projectDetails: { [key: string]: CommandOutput } = {
-    "1": [
-      "AI-powered Recommendation System:",
-      "• Built with Python, TensorFlow, and React.",
-      "• Delivers personalized content suggestions using collaborative filtering.",
-      "• Deployed on AWS with scalable microservices.",
-    ],
-    "2": [
-      "Computer Vision Application:",
-      "• Uses PyTorch for image classification and object detection.",
-      "• Real-time processing with optimized inference pipeline.",
-      "• Integrated with web dashboard for visualization.",
-    ],
-    "3": [
-      "Full-stack Web Application:",
-      "• Next.js frontend, Node.js backend, MongoDB database.",
-      "• Features authentication, RESTful APIs, and responsive UI.",
-      "• Deployed on GCP with CI/CD automation.",
-    ],
-  };
-
-  // Typing effect for last output line
+  // Typing effect logic
   useEffect(() => {
-    // Only type the last line if it's not a command and is a string
     const last = output[output.length - 1];
     if (last && !last.isCommand && typeof last.text === "string") {
       setTyping(true);
       setTypedText("");
       let index = 0;
       const text = last.text as string;
-      const speed = 30;
-      let cancelled = false;
-
       const typeNext = () => {
-        if (cancelled) return;
         if (index <= text.length) {
           setTypedText(text.slice(0, index));
           index++;
-          if (index <= text.length) {
-            setTimeout(typeNext, speed);
-          } else {
-            setTyping(false);
-          }
+          setTimeout(typeNext, 30);
+        } else {
+          setTyping(false);
         }
       };
       typeNext();
-
-      return () => {
-        cancelled = true;
-      };
     } else {
       setTyping(false);
-      setTypedText("");
     }
   }, [output]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-
-    if (input === "clear") {
-      setOutput([]);
-      setInput("");
-      return;
-    }
-
-    let newOutput: TerminalLine[] = [
-      ...output,
-      { text: input, isCommand: true },
-    ];
-
-    if (commands[input]) {
-      newOutput = [
-        ...newOutput,
-        ...commands[input]().map((line) => ({
-          text: line,
-          isCommand: false,
-        })),
-      ];
-    } else if (input.startsWith("project ")) {
-      const projectNum = input.split(" ")[1];
-      if (projectDetails[projectNum]) {
-        newOutput = [
-          ...newOutput,
-          ...projectDetails[projectNum].map((line) => ({
-            text: line,
-            isCommand: false,
-          })),
-        ];
-      } else {
-        newOutput.push({
-          text: `Project ${projectNum} doesn't exist.`,
-          isCommand: false,
-        });
-      }
-    } else if (input) {
-      newOutput.push({ text: `Command not found: ${input}`, isCommand: false });
-    }
-
-    setOutput(newOutput);
+    if (!input.trim()) return;
+    executeCommand(input);
     setInput("");
   };
 
   return (
-    <div className="w-full mt-1 h-full">
-      {/* Terminal top bar */}
-      <div className="flex items-center bg-gray-900 px-4 py-2 border-b border-gray-700  w-full h-[5%]">
+    <div className="w-full mt-1 h-full flex flex-col">
+      {/* Top Bar */}
+      <div className="flex items-center bg-gray-900 px-4 py-2 border-b border-gray-700 w-full h-[5%] shrink-0">
         <div className="flex space-x-2">
           <div className="w-3 h-3 rounded-full bg-red-500"></div>
           <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
           <div className="w-3 h-3 rounded-full bg-green-500"></div>
         </div>
-        <div className="ml-4 text-gray-300 text-sm">Terminal</div>
+        <div className="ml-4 text-gray-300 text-sm font-mono">Terminal</div>
       </div>
-      <div className="bg-gray-800 rounded-lg shadow-xl overflow-hidden h-[95%]">
-        {/* Terminal body */}
+
+      <div className="bg-gray-800 rounded-b-lg shadow-xl overflow-hidden h-[95%]">
         <div
-          className={`p-4 font-mono text-gray-100 h-full  overflow-y-auto ${jetbrainsMono.className}`}
+          className={`p-4 font-mono text-gray-100 h-full overflow-y-auto custom-scrollbar ${jetbrainsMono.className}`}
           style={{
             backgroundImage: `url(${terminalBg.src})`,
             backgroundSize: "cover",
             backgroundPosition: "center",
             backgroundBlendMode: "overlay",
-            backgroundColor: "rgba(31, 41, 55, 0.85)",
+            backgroundColor: "rgba(31, 41, 55, 0.9)",
           }}
         >
           {output.map((item, index) => {
@@ -226,46 +255,35 @@ const Terminal = () => {
               index === output.length - 1 &&
               !item.isCommand &&
               typeof item.text === "string";
-            if (isLastLine && typing) {
-              return (
-                <div
-                  key={`output-${index}-typing`}
-                  className="text-gray-300 mb-2 pl-3 sm:pl-4 md:pl-6"
-                >
-                  {typedText}
-                </div>
-              );
-            }
             return (
               <div
-                key={`output-${index}-${item.isCommand ? "cmd" : "out"}`}
+                key={index}
                 className={
                   item.isCommand
-                    ? "text-green-400 mb-2 "
-                    : "text-gray-300 mb-2 pl-3 sm:pl-4 md:pl-6"
+                    ? "text-green-400 mb-2 font-bold"
+                    : "text-gray-300 mb-2 pl-4"
                 }
               >
-                {item.isCommand ? `@ng'ashjoseph/${item.text} ~$` : item.text}
+                {item.isCommand
+                  ? `@ng'ashjoseph/${item.text} ~$`
+                  : isLastLine && typing
+                    ? typedText
+                    : item.text}
               </div>
             );
           })}
-
           <div ref={endOfTerminalRef} />
-
-          {/* Command input */}
-          <form onSubmit={handleSubmit} className="mt-2">
-            <div className="flex flex-wrap items-baseline">
-              <span className="text-green-400 whitespace-nowrap mr-2">
-                @ng'ashjoseph ~$
-              </span>
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value.toLowerCase())}
-                className="bg-transparent border-none outline-none text-gray-100 flex-grow min-w-[50%]"
-                autoFocus
-              />
-            </div>
+          <form onSubmit={handleSubmit} className="mt-2 flex">
+            <span className="text-green-400 whitespace-nowrap mr-2">
+              @ng'ashjoseph ~$
+            </span>
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              className="bg-transparent border-none outline-none text-gray-100 flex-grow"
+              autoFocus
+            />
           </form>
         </div>
       </div>
